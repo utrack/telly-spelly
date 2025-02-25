@@ -51,7 +51,7 @@ sudo dnf install python3-pyaudio portaudio-devel
 
 1. Launch "Telly Spelly" from your application menu or run:
 ```bash
-whisper-recorder
+telly-spelly
 ```
 
 2. Click the tray icon or use configured shortcuts to start/stop recording
