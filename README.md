@@ -16,7 +16,7 @@ A sleek KDE Plasma application that records audio and transcribes it in real-tim
 1. Clone the repository:
 ```bash
 git clone https://github.com/gbasilveira/telly-spelly.git
-cd whisper-recorder
+cd telly-spelly
 ```
 
 2. Run the installer:
@@ -49,7 +49,7 @@ sudo dnf install python3-pyaudio portaudio-devel
 
 ## Usage
 
-1. Launch "Whisper Recorder" from your application menu or run:
+1. Launch "Telly Spelly" from your application menu or run:
 ```bash
 whisper-recorder
 ```
