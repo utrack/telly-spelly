@@ -5,7 +5,8 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 import logging
 import keyboard
 from PyQt6.QtGui import QKeySequence
-from settings import Settings  # Add this import at the top
+from settings import Settings
+from recorder import AudioRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +64,18 @@ class SettingsWindow(QWidget):
         model_group = QGroupBox("Model Settings")
         model_layout = QFormLayout()
         
+        # OpenAI API Key field
+        self.api_key_field = QLineEdit()
+        self.api_key_field.setEchoMode(QLineEdit.EchoMode.Password)  # Hide the API key
+        self.api_key_field.setPlaceholderText("Enter your OpenAI API key")
+        current_api_key = self.settings.get('openai_api_key', '')
+        self.api_key_field.setText(current_api_key)
+        self.api_key_field.editingFinished.connect(self.on_api_key_changed)
+        model_layout.addRow("OpenAI API Key:", self.api_key_field)
+        
         self.model_combo = QComboBox()
         self.model_combo.addItems(Settings.VALID_MODELS)
-        current_model = self.settings.get('model', 'base')
+        current_model = self.settings.get('model', 'whisper-1')
         self.model_combo.setCurrentText(current_model)
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
         model_layout.addRow("Whisper Model:", self.model_combo)
@@ -89,10 +99,32 @@ class SettingsWindow(QWidget):
         recording_group = QGroupBox("Recording Settings")
         recording_layout = QFormLayout()
         
+        # Get a reference to the global recorder instance if available
+        try:
+            from main import recorder as global_recorder
+            device_list = global_recorder.get_device_list()
+        except (ImportError, AttributeError):
+            # Fall back to creating a temporary recorder if needed
+            logger.warning("Could not access global recorder, creating temporary instance")
+            temp_recorder = AudioRecorder()
+            device_list = temp_recorder.get_device_list()
+        
         self.device_combo = QComboBox()
-        self.device_combo.addItems(["Default Microphone"])  # You can populate this with actual devices
-        current_mic = self.settings.get('mic_index', 0)
-        self.device_combo.setCurrentIndex(current_mic)
+        # Add all available input devices
+        self.device_combo.addItem("Default Microphone", -1)  # Default option with value -1
+        for device in device_list:
+            self.device_combo.addItem(device['name'], device['index'])
+        
+        # Get current mic index from settings
+        current_mic = self.settings.get('mic_index', -1)
+        
+        # Find and set the current device
+        index = self.device_combo.findData(current_mic)
+        if index >= 0:
+            self.device_combo.setCurrentIndex(index)
+        else:
+            self.device_combo.setCurrentIndex(0)  # Default to first item
+            
         self.device_combo.currentIndexChanged.connect(self.on_device_changed)
         recording_layout.addRow("Input Device:", self.device_combo)
         
@@ -138,6 +170,16 @@ class SettingsWindow(QWidget):
         self.whisper_model = None
         self.current_model = None
 
+    def on_api_key_changed(self):
+        api_key = self.api_key_field.text().strip()
+        try:
+            self.settings.set('openai_api_key', api_key)
+            if api_key:
+                QMessageBox.information(self, "API Key Saved", "OpenAI API key has been saved. Restart transcription for changes to take effect.")
+        except ValueError as e:
+            logger.error(f"Failed to set API key: {e}")
+            QMessageBox.warning(self, "Error", str(e))
+            
     def on_language_changed(self, index):
         language_code = self.lang_combo.currentData()
         try:
@@ -148,7 +190,10 @@ class SettingsWindow(QWidget):
 
     def on_device_changed(self, index):
         try:
-            self.settings.set('mic_index', index)
+            # Get the device index from the combo box data
+            device_index = self.device_combo.currentData()
+            self.settings.set('mic_index', device_index)
+            logger.info(f"Microphone set to device index: {device_index}")
         except ValueError as e:
             logger.error(f"Failed to set microphone: {e}")
             QMessageBox.warning(self, "Error", str(e))
@@ -172,16 +217,16 @@ class SettingsWindow(QWidget):
 
     def load_model(self, model_name):
         try:
-            import whisper
-            self.whisper_model = whisper.load_model(model_name)
+            # For OpenAI API, we don't need to load a model locally
+            # Just update the UI to show it's ready
             self.current_model = model_name
-            self.progress_label.setText(f"Model {model_name} loaded successfully")
+            self.progress_label.setText(f"Using OpenAI Whisper API with model {model_name}")
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(100)
             self.initialization_complete.emit()
         except Exception as e:
-            logger.exception("Failed to load whisper model")
-            self.progress_label.setText(f"Failed to load model: {str(e)}")
+            logger.exception("Failed to set up OpenAI client")
+            self.progress_label.setText(f"Failed to set up OpenAI client: {str(e)}")
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(0)
 

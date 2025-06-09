@@ -1,10 +1,11 @@
 from PyQt6.QtCore import QSettings
 
 class Settings:
-    VALID_MODELS = ['tiny', 'base', 'small', 'medium', 'large', 'turbo']
+    # OpenAI Whisper API uses a single model type
+    VALID_MODELS = ['whisper-1','gpt-4o-transcribe']
     # List of valid language codes for Whisper
     VALID_LANGUAGES = {
-        'auto': 'Auto-detect',
+        '': 'Auto-detect',
         'en': 'English',
         'es': 'Spanish',
         'fr': 'French',

@@ -7,8 +7,20 @@ import logging
 import numpy as np
 from settings import Settings
 from scipy import signal
+from typing import List
 
 logger = logging.getLogger(__name__)
+
+# Define a type for device info dictionaries
+from typing import TypedDict
+
+class DeviceInfo(TypedDict, total=False):
+    index: int
+    name: str
+    maxInputChannels: int
+    defaultSampleRate: float
+    hostApi: int
+    maxOutputChannels: int
 
 class AudioRecorder(QObject):
     recording_finished = pyqtSignal(str)  # Emits path to recorded file
@@ -26,15 +38,9 @@ class AudioRecorder(QObject):
         self.current_device_info = None
         # Keep a reference to self to prevent premature deletion
         self._instance = self
-        
-    def start_recording(self):
-        if self.is_recording:
-            return
-            
-        try:
-            self.frames = []
-            self.is_recording = True
-            
+        self.get_device()
+
+    def get_device(self):
             # Get selected mic index from settings
             settings = Settings()
             mic_index = settings.get('mic_index')
@@ -58,13 +64,31 @@ class AudioRecorder(QObject):
             # Get supported sample rate from device
             sample_rate = int(device_info['defaultSampleRate'])
             logger.info(f"Using sample rate: {sample_rate}")
+    
+    def get_device_list(self) -> List[DeviceInfo]:
+        device_list = []
+        for i in range(self.audio.get_device_count()):
+            device_info = self.audio.get_device_info_by_index(i)
+            if device_info.get('maxInputChannels') > 0:
+                device_list.append(DeviceInfo(device_info))  # device_info is already a dictionary
+        return device_list
+        
+    def start_recording(self):
+        if self.is_recording:
+            return
+            
+        try:
+            self.frames = []
+            self.is_recording = True
+            
+            self.get_device()
             
             self.stream = self.audio.open(
                 format=pyaudio.paInt16,
                 channels=1,
-                rate=sample_rate,
+                rate=int(self.current_device_info['defaultSampleRate']),
                 input=True,
-                input_device_index=mic_index,
+                input_device_index=self.current_device_info['index'],
                 frames_per_buffer=1024,
                 stream_callback=self._callback
             )
