@@ -43,9 +43,9 @@ def install_application():
     app_name = "telly-spelly"
     
     # Check and install requirements first
-    if not install_requirements():
-        print("Failed to install required packages. Installation aborted.")
-        return False
+    #if not install_requirements():
+        #print("Failed to install required packages. Installation aborted.")
+        #return False
     
     # Create application directories
     app_dir = home / ".local/share/telly-spelly"

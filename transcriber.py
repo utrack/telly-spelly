@@ -1,8 +1,8 @@
 from PyQt6.QtCore import QObject, pyqtSignal, QThread, QTimer
-import whisper
 import os
 import logging
 import time
+import openai
 from settings import Settings
 logger = logging.getLogger(__name__)
 
@@ -23,15 +23,19 @@ class TranscriptionWorker(QThread):
                 
             self.progress.emit("Loading audio file...")
             
-            # Load and transcribe
-            self.progress.emit("Processing audio with Whisper...")
-            result = self.model.transcribe(
-                self.audio_file,
-                fp16=False,
-                language='en'
-            )
+            # Load and transcribe using OpenAI API
+            self.progress.emit("Processing audio with OpenAI Whisper API...")
             
-            text = result["text"].strip()
+            settings = Settings()
+            with open(self.audio_file, "rb") as audio_file:
+                # Use the OpenAI client to transcribe the audio
+                response = self.model.audio.transcriptions.create(
+                    file=audio_file,
+                    model=settings.get('model', 'whisper-1'),
+                    language=settings.get('language', '')
+                )
+            
+            text = response.text.strip()
             if not text:
                 raise ValueError("No text was transcribed")
                 
@@ -68,19 +72,23 @@ class WhisperTranscriber(QObject):
     def load_model(self):
         try:
             settings = Settings()
-            model_name = settings.get('model', 'turbo')
-            logger.info(f"Loading Whisper model: {model_name}")
+            api_key = settings.get('openai_api_key', None)
             
-            # Redirect whisper's logging to our logger
-            import logging as whisper_logging
-            whisper_logging.getLogger("whisper").setLevel(logging.WARNING)
-            
-            self.model = whisper.load_model(model_name)
-            logger.info("Model loaded successfully")
+            if not api_key:
+                logger.warning("OpenAI API key not found in settings. Transcription will not work until a key is provided.")
+                # Initialize with empty client to prevent crashes, but transcription won't work
+                self.model = None
+                return
+                
+            logger.info("Initializing OpenAI client")
+            self.model = openai.OpenAI(api_key=api_key)
+            logger.info("OpenAI client initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to load Whisper model: {e}")
-            raise
+            logger.error(f"Failed to initialize OpenAI client: {e}")
+            # Don't raise the exception, just log it
+            # This allows the app to start even if the client can't be initialized
+            self.model = None
         
     def _cleanup_worker(self):
         if self.worker:
@@ -89,8 +97,15 @@ class WhisperTranscriber(QObject):
                 self.worker = None
                 
     def transcribe(self, audio_file):
-        """Transcribe audio file using Whisper"""
+        """Transcribe audio file using OpenAI Whisper API"""
         try:
+            # Check if model is initialized
+            if self.model is None:
+                error_msg = "OpenAI API key not configured. Please add your API key in Settings."
+                logger.error(error_msg)
+                self.transcription_error.emit(error_msg)
+                return
+                
             settings = Settings()
             language = settings.get('language', 'auto')
             
@@ -98,13 +113,14 @@ class WhisperTranscriber(QObject):
             self.transcription_progress.emit("Processing audio...")
             
             # Run transcription with language setting
-            result = self.model.transcribe(
-                audio_file,
-                fp16=False,
-                language=None if language == 'auto' else language
-            )
+            with open(audio_file, "rb") as file:
+                response = self.model.audio.transcriptions.create(
+                    file=file,
+                    model="whisper-1",
+                    language=None if language == 'auto' else language
+                )
             
-            text = result["text"].strip()
+            text = response.text.strip()
             if not text:
                 raise ValueError("No text was transcribed")
                 
@@ -126,6 +142,13 @@ class WhisperTranscriber(QObject):
     def transcribe_file(self, audio_file):
         if self.worker and self.worker.isRunning():
             logger.warning("Transcription already in progress")
+            return
+            
+        # Check if model is initialized
+        if self.model is None:
+            error_msg = "OpenAI API key not configured. Please add your API key in Settings."
+            logger.error(error_msg)
+            self.transcription_error.emit(error_msg)
             return
             
         # Emit initial progress status before starting worker
