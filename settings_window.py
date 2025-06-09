@@ -32,7 +32,7 @@ class ShortcutEdit(QLineEdit):
             return
             
         # Create key sequence
-        sequence = QKeySequence(modifiers | key)
+        sequence = QKeySequence(modifiers.value | key)
         self.setText(sequence.toString())
         self.recording = False
         self.clearFocus()

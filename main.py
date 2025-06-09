@@ -15,6 +15,8 @@ import ctypes
 import os
 from shortcuts import GlobalShortcuts
 from settings import Settings
+from PyQt6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
+import argparse
 # from mic_debug import MicDebugWindow
 
 # Setup logging
@@ -62,6 +64,7 @@ def check_dependencies():
         
     return True
 
+
 class TrayRecorder(QSystemTrayIcon):
     initialization_complete = pyqtSignal()
     
@@ -86,8 +89,12 @@ class TrayRecorder(QSystemTrayIcon):
         self.activated.connect(self.on_activate)
         
         # Add shortcuts handler
-        self.shortcuts = GlobalShortcuts()
+        # session_bus will be passed from main() or wherever TrayRecorder is instantiated
+        # For now, assuming it's passed to __init__
+        # This will require changing TrayRecorder.__init__ signature
+        self.shortcuts = GlobalShortcuts(QDBusConnection.sessionBus()) # Or pass session_bus if available
         self.shortcuts.start_recording_triggered.connect(self.start_recording)
+        logger.info("self.shortcuts set.")
         self.shortcuts.stop_recording_triggered.connect(self.stop_recording)
 
     def initialize(self):
@@ -110,9 +117,8 @@ class TrayRecorder(QSystemTrayIcon):
         # Create menu
         self.setup_menu()
         
-        # Setup global shortcuts
-        if not self.shortcuts.setup_shortcuts():
-            logger.warning("Failed to register global shortcuts")
+        # Setup global shortcuts listener (actions are defined in .desktop file)
+        self.shortcuts.register_shortcuts()
             
     def setup_menu(self):
         menu = QMenu()
@@ -293,11 +299,13 @@ class TrayRecorder(QSystemTrayIcon):
 
     def start_recording(self):
         """Start a new recording"""
+        logger.info("Start recording triggered")
         if not self.recording:
             self.toggle_recording()
             
     def stop_recording(self):
         """Stop current recording"""
+        logger.info("Stop recording triggered")
         if self.recording:
             self.toggle_recording()
 
@@ -310,54 +318,61 @@ class TrayRecorder(QSystemTrayIcon):
             self.debug_window.show()
             self.debug_action.setText("Hide Debug Window")
 
-def setup_application_metadata():
-    QCoreApplication.setApplicationName("Telly Spelly")
-    QCoreApplication.setApplicationVersion("1.0")
-    QCoreApplication.setOrganizationName("KDE")
-    QCoreApplication.setOrganizationDomain("kde.org")
-
 def main():
+    parser = argparse.ArgumentParser(description="Telly Spelly Application")
+    parser.add_argument("--start-recording", action="store_true", help="Signal running instance to start recording.")
+    parser.add_argument("--stop-recording", action="store_true", help="Signal running instance to stop recording.")
+    args, unknown = parser.parse_known_args()
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("Telly Spelly")
+    app.setApplicationVersion("1.0")
+    app.setOrganizationName("KDE")
+    app.setOrganizationDomain("kde.org")
+
+    session_bus = QDBusConnection.sessionBus()
+
+    if args.start_recording or args.stop_recording:
+        shortcuts = GlobalShortcuts(session_bus)
+        if args.start_recording:
+            shortcuts.callExistingInstance("start_recording")
+        elif args.stop_recording:
+            shortcuts.callExistingInstance("stop_recording")
+        QApplication.exit(0)
+        return
+    
+
     try:
-        app = QApplication(sys.argv)
-        setup_application_metadata()
-        
-        # Show loading window first
         loading_window = LoadingWindow()
         loading_window.show()
-        app.processEvents()  # Force update of UI
+        app.processEvents()
         loading_window.set_status("Checking system requirements...")
-        app.processEvents()  # Force update of UI
-        
-        # Check if system tray is available
+        app.processEvents()
+
         if not TrayRecorder.isSystemTrayAvailable():
-            QMessageBox.critical(None, "Error", 
-                "System tray is not available. Please ensure your desktop environment supports system tray icons.")
+            QMessageBox.critical(None, "Error", "System tray is not available. Please ensure your desktop environment supports system tray icons.")
             return 1
         
-        # Create tray icon but don't initialize yet
         tray = TrayRecorder()
-        
-        # Connect loading window to tray initialization
         tray.initialization_complete.connect(loading_window.close)
         
-        # Check dependencies in background
         loading_window.set_status("Checking dependencies...")
-        app.processEvents()  # Force update of UI
+        app.processEvents()
         if not check_dependencies():
+            loading_window.close()
             return 1
         
-        # Ensure the application doesn't quit when last window is closed
         app.setQuitOnLastWindowClosed(False)
         
-        # Initialize tray in background
         QTimer.singleShot(100, lambda: initialize_tray(tray, loading_window, app))
         
-        return app.exec()
+        exit_code = app.exec()
+        
+        return exit_code
         
     except Exception as e:
         logger.exception("Failed to start application")
-        QMessageBox.critical(None, "Error", 
-            f"Failed to start application: {str(e)}")
+        QMessageBox.critical(None, "Error", f"Failed to start application: {str(e)}")
         return 1
 
 def initialize_tray(tray, loading_window, app):

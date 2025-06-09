@@ -8,3 +8,14 @@ Type=Application
 Categories=Qt;KDE;Audio;AudioVideo;
 Terminal=false
 X-KDE-StartupNotify=true 
+Actions=StartRecordingAction;StopRecordingAction;
+
+[Desktop Action StartRecordingAction]
+Name=Start Recording (TellySpelly)
+Exec=telly-spelly --start-recording # Optional: if KGlobalAccel directly launches
+Icon=media-record
+
+[Desktop Action StopRecordingAction]
+Name=Stop Recording (TellySpelly)
+Exec=telly-spelly --stop-recording # Optional
+Icon=media-playback-stop
