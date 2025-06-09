@@ -144,19 +144,10 @@ class SettingsWindow(QWidget):
         # Add shortcuts group
         shortcuts_group = QGroupBox("Keyboard Shortcuts")
         shortcuts_layout = QFormLayout()
-        
-        self.start_shortcut = ShortcutEdit()
-        self.start_shortcut.setText(self.settings.get('start_shortcut', 'ctrl+alt+r'))
-        self.stop_shortcut = ShortcutEdit()
-        self.stop_shortcut.setText(self.settings.get('stop_shortcut', 'ctrl+alt+s'))
-        
-        shortcuts_layout.addRow("Start Recording:", self.start_shortcut)
-        shortcuts_layout.addRow("Stop Recording:", self.stop_shortcut)
-        
-        apply_btn = QPushButton("Apply Shortcuts")
-        apply_btn.clicked.connect(self.apply_shortcuts)
-        shortcuts_layout.addRow(apply_btn)
-        
+
+        shortcut_note = QLabel("Shortcuts are managed through KDE Plasma's global shortcuts system.")
+        shortcut_note.setWordWrap(True)
+        shortcuts_layout.addRow(shortcut_note)
         shortcuts_group.setLayout(shortcuts_layout)
         layout.addWidget(shortcuts_group)
         
